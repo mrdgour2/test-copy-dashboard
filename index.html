@@ -77,6 +77,11 @@
       background-color: #3a5a8a;
     }
 
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+
     .btn-secondary {
       background-color: #6c757d;
     }
@@ -180,6 +185,37 @@
       text-align: center;
       padding: 20px;
       color: #666;
+    }
+
+    /* Progress bar styles */
+    .progress-container {
+      width: 100%;
+      background-color: #f3f3f3;
+      border-radius: 4px;
+      margin: 15px 0;
+      display: none;
+    }
+
+    .progress-bar {
+      height: 20px;
+      background-color: #4a6fa5;
+      border-radius: 4px;
+      width: 0%;
+      transition: width 0.3s;
+    }
+
+    .progress-text {
+      text-align: center;
+      margin-top: 5px;
+      font-size: 14px;
+      color: #666;
+    }
+
+    .student-info {
+      background-color: #f8f9fa;
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 15px;
     }
   </style>
 </head>
@@ -319,6 +355,12 @@
             <span id="fileName" style="margin-left: 10px;">No file chosen</span>
           </div>
           
+          <!-- Progress bar for student upload -->
+          <div id="studentProgressContainer" class="progress-container">
+            <div id="studentProgressBar" class="progress-bar"></div>
+          </div>
+          <div id="studentProgressText" class="progress-text hidden"></div>
+          
           <button id="uploadBtn">Upload</button>
         </div>
         
@@ -386,15 +428,23 @@
           </div>
           
           <div id="studentInfo" class="hidden">
-            <h3>Student Information</h3>
-            <p><strong>Name:</strong> <span id="studentName"></span></p>
-            <p><strong>Mobile:</strong> <span id="studentMobileDisplay"></span></p>
+            <div class="student-info">
+              <h3>Student Information</h3>
+              <p><strong>Name:</strong> <span id="studentName"></span></p>
+              <p><strong>Mobile:</strong> <span id="studentMobileDisplay"></span></p>
+            </div>
             
             <div class="file-upload" style="margin-top: 15px;">
               <input type="file" id="checkedCopyFile" accept=".pdf" required>
               <label for="checkedCopyFile">Choose Checked PDF File</label>
               <span id="checkedFileName" style="margin-left: 10px;">No file chosen</span>
             </div>
+            
+            <!-- Progress bar for teacher upload -->
+            <div id="teacherProgressContainer" class="progress-container">
+              <div id="teacherProgressBar" class="progress-bar"></div>
+            </div>
+            <div id="teacherProgressText" class="progress-text hidden"></div>
             
             <button id="uploadCheckedBtn" style="margin-top: 10px;">Upload Checked Copy</button>
           </div>
@@ -517,7 +567,7 @@
     }
 
     // Upload test copy (using Firestore instead of Storage)
-    function uploadTestCopy(studentId, file) {
+    function uploadTestCopy(studentId, file, onProgress) {
       return new Promise((resolve, reject) => {
         // Check file size (Firestore has 1MB limit per document)
         if (file.size > 1000000) { // 1MB in bytes
@@ -526,6 +576,15 @@
         }
 
         const reader = new FileReader();
+        
+        // Track progress
+        reader.onprogress = function(event) {
+          if (event.lengthComputable && onProgress) {
+            const percentLoaded = Math.round((event.loaded / event.total) * 100);
+            onProgress(percentLoaded);
+          }
+        };
+        
         reader.onload = function(event) {
           const base64 = event.target.result;
           
@@ -546,10 +605,13 @@
             reject(error);
           });
         };
+        
         reader.onerror = function(error) {
           console.error('FileReader error: ', error);
           reject(error);
         };
+        
+        // Start reading the file
         reader.readAsDataURL(file);
       });
     }
@@ -597,7 +659,7 @@
     }
 
     // Upload checked copy (using Firestore instead of Storage)
-    function uploadCheckedCopy(studentId, testCopyId, file) {
+    function uploadCheckedCopy(studentId, testCopyId, file, onProgress) {
       return new Promise((resolve, reject) => {
         // Check file size (Firestore has 1MB limit per document)
         if (file.size > 1000000) { // 1MB in bytes
@@ -606,6 +668,15 @@
         }
 
         const reader = new FileReader();
+        
+        // Track progress
+        reader.onprogress = function(event) {
+          if (event.lengthComputable && onProgress) {
+            const percentLoaded = Math.round((event.loaded / event.total) * 100);
+            onProgress(percentLoaded);
+          }
+        };
+        
         reader.onload = function(event) {
           const base64 = event.target.result;
           
@@ -631,10 +702,13 @@
             reject(error);
           });
         };
+        
         reader.onerror = function(error) {
           console.error('FileReader error: ', error);
           reject(error);
         };
+        
+        // Start reading the file
         reader.readAsDataURL(file);
       });
     }
@@ -722,25 +796,58 @@
           const studentId = auth.currentUser.uid;
           console.log('Uploading file for student:', studentId);
           
-          uploadTestCopy(studentId, file)
-            .then(() => {
-              notification.textContent = 'File uploaded successfully!';
-              notification.classList.remove('hidden');
-              notification.classList.remove('error');
-              
-              // Reset file input
-              fileInput.value = '';
-              document.getElementById('fileName').textContent = 'No file chosen';
-              
-              // Reload the copies list
-              loadStudentCopies(studentId);
-            })
-            .catch(error => {
-              console.error('Upload error:', error);
-              notification.textContent = 'Error uploading file: ' + error.message;
-              notification.classList.remove('hidden');
-              notification.classList.add('error');
-            });
+          // Show progress bar
+          const progressContainer = document.getElementById('studentProgressContainer');
+          const progressBar = document.getElementById('studentProgressBar');
+          const progressText = document.getElementById('studentProgressText');
+          
+          if (progressContainer) progressContainer.style.display = 'block';
+          if (progressBar) progressBar.style.width = '0%';
+          if (progressText) {
+            progressText.classList.remove('hidden');
+            progressText.textContent = 'Uploading... 0%';
+          }
+          
+          // Disable upload button during upload
+          uploadBtn.disabled = true;
+          
+          uploadTestCopy(studentId, file, function(percentLoaded) {
+            // Update progress bar
+            if (progressBar) progressBar.style.width = percentLoaded + '%';
+            if (progressText) progressText.textContent = `Uploading... ${percentLoaded}%`;
+          })
+          .then(() => {
+            notification.textContent = 'File uploaded successfully!';
+            notification.classList.remove('hidden');
+            notification.classList.remove('error');
+            
+            // Reset file input
+            fileInput.value = '';
+            document.getElementById('fileName').textContent = 'No file chosen';
+            
+            // Hide progress bar
+            if (progressContainer) progressContainer.style.display = 'none';
+            if (progressText) progressText.classList.add('hidden');
+            
+            // Enable upload button
+            uploadBtn.disabled = false;
+            
+            // Reload the copies list
+            loadStudentCopies(studentId);
+          })
+          .catch(error => {
+            console.error('Upload error:', error);
+            notification.textContent = 'Error uploading file: ' + error.message;
+            notification.classList.remove('hidden');
+            notification.classList.add('error');
+            
+            // Hide progress bar
+            if (progressContainer) progressContainer.style.display = 'none';
+            if (progressText) progressText.classList.add('hidden');
+            
+            // Enable upload button
+            uploadBtn.disabled = false;
+          });
         });
       }
       
@@ -810,6 +917,7 @@
               document.getElementById('studentMobileDisplay').textContent = studentData.mobile;
               document.getElementById('studentInfo').classList.remove('hidden');
               document.getElementById('studentInfo').dataset.studentId = studentDoc.id;
+              document.getElementById('studentInfo').dataset.studentName = studentData.name;
               
               notification.textContent = 'Student found! You can now upload a checked copy.';
               notification.classList.remove('hidden');
@@ -859,6 +967,21 @@
           const studentId = studentInfo.dataset.studentId;
           console.log('Uploading checked copy for student:', studentId);
           
+          // Show progress bar
+          const progressContainer = document.getElementById('teacherProgressContainer');
+          const progressBar = document.getElementById('teacherProgressBar');
+          const progressText = document.getElementById('teacherProgressText');
+          
+          if (progressContainer) progressContainer.style.display = 'block';
+          if (progressBar) progressBar.style.width = '0%';
+          if (progressText) {
+            progressText.classList.remove('hidden');
+            progressText.textContent = 'Uploading... 0%';
+          }
+          
+          // Disable upload button during upload
+          uploadCheckedBtn.disabled = true;
+          
           // Find a pending copy for this student
           db.collection('testCopies')
             .where('studentId', '==', studentId)
@@ -870,38 +993,71 @@
                 notification.textContent = 'No pending copy found for this student';
                 notification.classList.remove('hidden');
                 notification.classList.add('error');
+                
+                // Hide progress bar
+                if (progressContainer) progressContainer.style.display = 'none';
+                if (progressText) progressText.classList.add('hidden');
+                
+                // Enable upload button
+                uploadCheckedBtn.disabled = false;
+                
                 return;
               }
               
               const testCopyDoc = querySnapshot.docs[0];
               const testCopyId = testCopyDoc.id;
               
-              uploadCheckedCopy(studentId, testCopyId, file)
-                .then(() => {
-                  notification.textContent = 'Checked copy uploaded successfully!';
-                  notification.classList.remove('hidden');
-                  notification.classList.remove('error');
-                  
-                  // Reset file input
-                  fileInput.value = '';
-                  document.getElementById('checkedFileName').textContent = 'No file chosen';
-                  
-                  // Reload the pending copies and checked copies
-                  loadPendingCopies();
-                  loadCheckedCopiesForTeacher();
-                })
-                .catch(error => {
-                  console.error('Error uploading checked copy:', error);
-                  notification.textContent = error.message;
-                  notification.classList.remove('hidden');
-                  notification.classList.add('error');
-                });
+              uploadCheckedCopy(studentId, testCopyId, file, function(percentLoaded) {
+                // Update progress bar
+                if (progressBar) progressBar.style.width = percentLoaded + '%';
+                if (progressText) progressText.textContent = `Uploading... ${percentLoaded}%`;
+              })
+              .then(() => {
+                notification.textContent = 'Checked copy uploaded successfully!';
+                notification.classList.remove('hidden');
+                notification.classList.remove('error');
+                
+                // Reset file input
+                fileInput.value = '';
+                document.getElementById('checkedFileName').textContent = 'No file chosen';
+                
+                // Hide progress bar
+                if (progressContainer) progressContainer.style.display = 'none';
+                if (progressText) progressText.classList.add('hidden');
+                
+                // Enable upload button
+                uploadCheckedBtn.disabled = false;
+                
+                // Reload the pending copies and checked copies
+                loadPendingCopies();
+                loadCheckedCopiesForTeacher();
+              })
+              .catch(error => {
+                console.error('Error uploading checked copy:', error);
+                notification.textContent = error.message;
+                notification.classList.remove('hidden');
+                notification.classList.add('error');
+                
+                // Hide progress bar
+                if (progressContainer) progressContainer.style.display = 'none';
+                if (progressText) progressText.classList.add('hidden');
+                
+                // Enable upload button
+                uploadCheckedBtn.disabled = false;
+              });
             })
             .catch(error => {
               console.error('Error finding pending copy:', error);
               notification.textContent = error.message;
               notification.classList.remove('hidden');
               notification.classList.add('error');
+              
+              // Hide progress bar
+              if (progressContainer) progressContainer.style.display = 'none';
+              if (progressText) progressText.classList.add('hidden');
+              
+              // Enable upload button
+              uploadCheckedBtn.disabled = false;
             });
         });
       }

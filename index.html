@@ -175,6 +175,12 @@
     .active {
       display: block;
     }
+
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: #666;
+    }
   </style>
 </head>
 <body>
@@ -319,7 +325,8 @@
         <div class="card">
           <h2>Your Uploaded Copies</h2>
           <div id="copiesList">
-            <table>
+            <div id="uploadedCopiesLoading" class="loading">Loading your uploaded copies...</div>
+            <table id="uploadedCopiesTable" style="display: none;">
               <thead>
                 <tr>
                   <th>S.No</th>
@@ -339,7 +346,8 @@
         <div class="card">
           <h2>Checked Copies</h2>
           <div id="checkedCopiesList">
-            <table>
+            <div id="checkedCopiesLoading" class="loading">Loading your checked copies...</div>
+            <table id="checkedCopiesTable" style="display: none;">
               <thead>
                 <tr>
                   <th>S.No</th>
@@ -397,7 +405,8 @@
         <div class="card">
           <h2>Pending Test Copies</h2>
           <div id="pendingCopiesList">
-            <table>
+            <div id="pendingCopiesLoading" class="loading">Loading pending test copies...</div>
+            <table id="pendingCopiesTable" style="display: none;">
               <thead>
                 <tr>
                   <th>S.No</th>
@@ -414,6 +423,28 @@
             </table>
           </div>
         </div>
+        
+        <div class="card">
+          <h2>Checked Copies</h2>
+          <div id="teacherCheckedCopiesList">
+            <div id="teacherCheckedCopiesLoading" class="loading">Loading checked copies...</div>
+            <table id="teacherCheckedCopiesTable" style="display: none;">
+              <thead>
+                <tr>
+                  <th>S.No</th>
+                  <th>Student Name</th>
+                  <th>Student Mobile</th>
+                  <th>File Name</th>
+                  <th>Check Date</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="teacherCheckedCopiesTableBody">
+                <!-- Table rows will be added dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -425,7 +456,7 @@
 
   <script>
     // Firebase configuration - replace with your own
-    const firebaseConfig = {
+   const firebaseConfig = {
     apiKey: "AIzaSyD8x9IaO9l2esQrI147mskCCdRjXKinBzM",
     authDomain: "test-copy-dashboard.firebaseapp.com",
     projectId: "test-copy-dashboard",
@@ -555,6 +586,13 @@
     function getPendingCopies() {
       return db.collection('testCopies')
         .where('status', '==', 'pending')
+        .get();
+    }
+
+    // Get checked copies for teacher
+    function getCheckedCopiesForTeacher() {
+      return db.collection('checkedCopies')
+        .orderBy('checkDate', 'desc')
         .get();
     }
 
@@ -728,8 +766,9 @@
 
       console.log('Initializing teacher dashboard for user:', auth.currentUser.uid);
       
-      // Load pending copies
+      // Load pending copies and checked copies
       loadPendingCopies();
+      loadCheckedCopiesForTeacher();
       
       // File input change
       const fileInput = document.getElementById('checkedCopyFile');
@@ -847,8 +886,9 @@
                   fileInput.value = '';
                   document.getElementById('checkedFileName').textContent = 'No file chosen';
                   
-                  // Reload the pending copies list
+                  // Reload the pending copies and checked copies
                   loadPendingCopies();
+                  loadCheckedCopiesForTeacher();
                 })
                 .catch(error => {
                   console.error('Error uploading checked copy:', error);
@@ -887,6 +927,14 @@
     // Load student copies
     function loadStudentCopies(studentId) {
       console.log('Loading student copies for:', studentId);
+      
+      // Show loading indicator
+      const loadingElement = document.getElementById('uploadedCopiesLoading');
+      const tableElement = document.getElementById('uploadedCopiesTable');
+      
+      if (loadingElement) loadingElement.style.display = 'block';
+      if (tableElement) tableElement.style.display = 'none';
+      
       getStudentCopies(studentId)
         .then(querySnapshot => {
           const tableBody = document.getElementById('copiesTableBody');
@@ -896,35 +944,55 @@
           
           if (querySnapshot.empty) {
             tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No copies uploaded yet</td></tr>';
-            return;
+          } else {
+            let serialNo = 1;
+            querySnapshot.forEach(doc => {
+              const data = doc.data();
+              const row = document.createElement('tr');
+              
+              const date = data.uploadDate ? new Date(data.uploadDate.toDate()).toLocaleDateString() : 'N/A';
+              
+              row.innerHTML = `
+                <td>${serialNo++}</td>
+                <td>${data.fileName}</td>
+                <td>${date}</td>
+                <td>${data.status}</td>
+                <td><a href="#" onclick="viewPDF('${data.fileData}', '${data.fileName}')">View</a></td>
+              `;
+              
+              tableBody.appendChild(row);
+            });
           }
           
-          let serialNo = 1;
-          querySnapshot.forEach(doc => {
-            const data = doc.data();
-            const row = document.createElement('tr');
-            
-            const date = data.uploadDate ? new Date(data.uploadDate.toDate()).toLocaleDateString() : 'N/A';
-            
-            row.innerHTML = `
-              <td>${serialNo++}</td>
-              <td>${data.fileName}</td>
-              <td>${date}</td>
-              <td>${data.status}</td>
-              <td><a href="#" onclick="viewPDF('${data.fileData}', '${data.fileName}')">View</a></td>
-            `;
-            
-            tableBody.appendChild(row);
-          });
+          // Hide loading and show table
+          if (loadingElement) loadingElement.style.display = 'none';
+          if (tableElement) tableElement.style.display = 'table';
         })
         .catch(error => {
           console.error('Error loading copies:', error);
+          
+          // Hide loading and show error
+          if (loadingElement) loadingElement.style.display = 'none';
+          if (tableElement) tableElement.style.display = 'table';
+          
+          const tableBody = document.getElementById('copiesTableBody');
+          if (tableBody) {
+            tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Error loading copies</td></tr>';
+          }
         });
     }
 
-    // Load checked copies
+    // Load checked copies for student
     function loadCheckedCopies(studentId) {
       console.log('Loading checked copies for:', studentId);
+      
+      // Show loading indicator
+      const loadingElement = document.getElementById('checkedCopiesLoading');
+      const tableElement = document.getElementById('checkedCopiesTable');
+      
+      if (loadingElement) loadingElement.style.display = 'block';
+      if (tableElement) tableElement.style.display = 'none';
+      
       getCheckedCopies(studentId)
         .then(querySnapshot => {
           const tableBody = document.getElementById('checkedCopiesTableBody');
@@ -934,34 +1002,54 @@
           
           if (querySnapshot.empty) {
             tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No checked copies yet</td></tr>';
-            return;
+          } else {
+            let serialNo = 1;
+            querySnapshot.forEach(doc => {
+              const data = doc.data();
+              const row = document.createElement('tr');
+              
+              const date = data.checkDate ? new Date(data.checkDate.toDate()).toLocaleDateString() : 'N/A';
+              
+              row.innerHTML = `
+                <td>${serialNo++}</td>
+                <td>${data.fileName}</td>
+                <td>${date}</td>
+                <td><a href="#" onclick="viewPDF('${data.fileData}', '${data.fileName}')">View</a></td>
+              `;
+              
+              tableBody.appendChild(row);
+            });
           }
           
-          let serialNo = 1;
-          querySnapshot.forEach(doc => {
-            const data = doc.data();
-            const row = document.createElement('tr');
-            
-            const date = data.checkDate ? new Date(data.checkDate.toDate()).toLocaleDateString() : 'N/A';
-            
-            row.innerHTML = `
-              <td>${serialNo++}</td>
-              <td>${data.fileName}</td>
-              <td>${date}</td>
-              <td><a href="#" onclick="viewPDF('${data.fileData}', '${data.fileName}')">View</a></td>
-            `;
-            
-            tableBody.appendChild(row);
-          });
+          // Hide loading and show table
+          if (loadingElement) loadingElement.style.display = 'none';
+          if (tableElement) tableElement.style.display = 'table';
         })
         .catch(error => {
           console.error('Error loading checked copies:', error);
+          
+          // Hide loading and show error
+          if (loadingElement) loadingElement.style.display = 'none';
+          if (tableElement) tableElement.style.display = 'table';
+          
+          const tableBody = document.getElementById('checkedCopiesTableBody');
+          if (tableBody) {
+            tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Error loading checked copies</td></tr>';
+          }
         });
     }
 
     // Load pending copies
     function loadPendingCopies() {
       console.log('Loading pending copies');
+      
+      // Show loading indicator
+      const loadingElement = document.getElementById('pendingCopiesLoading');
+      const tableElement = document.getElementById('pendingCopiesTable');
+      
+      if (loadingElement) loadingElement.style.display = 'block';
+      if (tableElement) tableElement.style.display = 'none';
+      
       getPendingCopies()
         .then(querySnapshot => {
           const tableBody = document.getElementById('pendingCopiesTableBody');
@@ -971,45 +1059,130 @@
           
           if (querySnapshot.empty) {
             tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No pending copies</td></tr>';
-            return;
+          } else {
+            // Get student information for each copy
+            const promises = [];
+            querySnapshot.forEach(doc => {
+              const copyData = doc.data();
+              const studentPromise = db.collection('students').doc(copyData.studentId).get();
+              promises.push({ copyData, docId: doc.id, studentPromise });
+            });
+            
+            Promise.all(promises.map(p => p.studentPromise))
+              .then(studentDocs => {
+                let serialNo = 1;
+                promises.forEach((p, index) => {
+                  const studentDoc = studentDocs[index];
+                  const studentData = studentDoc.data();
+                  const row = document.createElement('tr');
+                  
+                  const date = p.copyData.uploadDate ? new Date(p.copyData.uploadDate.toDate()).toLocaleDateString() : 'N/A';
+                  
+                  row.innerHTML = `
+                    <td>${serialNo++}</td>
+                    <td>${studentData.name}</td>
+                    <td>${studentData.mobile}</td>
+                    <td>${p.copyData.fileName}</td>
+                    <td>${date}</td>
+                    <td>
+                      <a href="#" onclick="viewPDF('${p.copyData.fileData}', '${p.copyData.fileName}')">View</a>
+                      <button class="btn-secondary" onclick="selectStudent('${studentData.mobile}')" style="margin-left: 10px;">Check</button>
+                    </td>
+                  `;
+                  
+                  tableBody.appendChild(row);
+                });
+              });
           }
           
-          // Get student information for each copy
-          const promises = [];
-          querySnapshot.forEach(doc => {
-            const copyData = doc.data();
-            const studentPromise = db.collection('students').doc(copyData.studentId).get();
-            promises.push({ copyData, docId: doc.id, studentPromise });
-          });
-          
-          Promise.all(promises.map(p => p.studentPromise))
-            .then(studentDocs => {
-              let serialNo = 1;
-              promises.forEach((p, index) => {
-                const studentDoc = studentDocs[index];
-                const studentData = studentDoc.data();
-                const row = document.createElement('tr');
-                
-                const date = p.copyData.uploadDate ? new Date(p.copyData.uploadDate.toDate()).toLocaleDateString() : 'N/A';
-                
-                row.innerHTML = `
-                  <td>${serialNo++}</td>
-                  <td>${studentData.name}</td>
-                  <td>${studentData.mobile}</td>
-                  <td>${p.copyData.fileName}</td>
-                  <td>${date}</td>
-                  <td>
-                    <a href="#" onclick="viewPDF('${p.copyData.fileData}', '${p.copyData.fileName}')">View</a>
-                    <button class="btn-secondary" onclick="selectStudent('${studentData.mobile}')" style="margin-left: 10px;">Check</button>
-                  </td>
-                `;
-                
-                tableBody.appendChild(row);
-              });
-            });
+          // Hide loading and show table
+          if (loadingElement) loadingElement.style.display = 'none';
+          if (tableElement) tableElement.style.display = 'table';
         })
         .catch(error => {
           console.error('Error loading pending copies:', error);
+          
+          // Hide loading and show error
+          if (loadingElement) loadingElement.style.display = 'none';
+          if (tableElement) tableElement.style.display = 'table';
+          
+          const tableBody = document.getElementById('pendingCopiesTableBody');
+          if (tableBody) {
+            tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Error loading pending copies</td></tr>';
+          }
+        });
+    }
+
+    // Load checked copies for teacher
+    function loadCheckedCopiesForTeacher() {
+      console.log('Loading checked copies for teacher');
+      
+      // Show loading indicator
+      const loadingElement = document.getElementById('teacherCheckedCopiesLoading');
+      const tableElement = document.getElementById('teacherCheckedCopiesTable');
+      
+      if (loadingElement) loadingElement.style.display = 'block';
+      if (tableElement) tableElement.style.display = 'none';
+      
+      getCheckedCopiesForTeacher()
+        .then(querySnapshot => {
+          const tableBody = document.getElementById('teacherCheckedCopiesTableBody');
+          if (!tableBody) return;
+          
+          tableBody.innerHTML = '';
+          
+          if (querySnapshot.empty) {
+            tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No checked copies yet</td></tr>';
+          } else {
+            // Get student information for each copy
+            const promises = [];
+            querySnapshot.forEach(doc => {
+              const copyData = doc.data();
+              const studentPromise = db.collection('students').doc(copyData.studentId).get();
+              promises.push({ copyData, docId: doc.id, studentPromise });
+            });
+            
+            Promise.all(promises.map(p => p.studentPromise))
+              .then(studentDocs => {
+                let serialNo = 1;
+                promises.forEach((p, index) => {
+                  const studentDoc = studentDocs[index];
+                  const studentData = studentDoc.data();
+                  const row = document.createElement('tr');
+                  
+                  const date = p.copyData.checkDate ? new Date(p.copyData.checkDate.toDate()).toLocaleDateString() : 'N/A';
+                  
+                  row.innerHTML = `
+                    <td>${serialNo++}</td>
+                    <td>${studentData.name}</td>
+                    <td>${studentData.mobile}</td>
+                    <td>${p.copyData.fileName}</td>
+                    <td>${date}</td>
+                    <td>
+                      <a href="#" onclick="viewPDF('${p.copyData.fileData}', '${p.copyData.fileName}')">View</a>
+                    </td>
+                  `;
+                  
+                  tableBody.appendChild(row);
+                });
+              });
+          }
+          
+          // Hide loading and show table
+          if (loadingElement) loadingElement.style.display = 'none';
+          if (tableElement) tableElement.style.display = 'table';
+        })
+        .catch(error => {
+          console.error('Error loading checked copies for teacher:', error);
+          
+          // Hide loading and show error
+          if (loadingElement) loadingElement.style.display = 'none';
+          if (tableElement) tableElement.style.display = 'table';
+          
+          const tableBody = document.getElementById('teacherCheckedCopiesTableBody');
+          if (tableBody) {
+            tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Error loading checked copies</td></tr>';
+          }
         });
     }
 
@@ -1132,6 +1305,7 @@
           console.log('Teacher logged in:', user.uid);
           if (document.getElementById('teacherDashboardPage').classList.contains('active')) {
             loadPendingCopies();
+            loadCheckedCopiesForTeacher();
           }
         }
       } else {

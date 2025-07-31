@@ -372,7 +372,7 @@
         <div class="card">
           <h2>Find Student</h2>
           <div class="form-group">
-            <label for="studentMobile">Student Mobile Number</label>
+            <label for="teacherStudentMobile">Student Mobile Number</label>
             <input type="tel" id="teacherStudentMobile" placeholder="Enter student's mobile number">
             <button id="searchBtn" style="margin-top: 10px;">Search</button>
           </div>
@@ -448,6 +448,13 @@
       
       // Show the selected page
       document.getElementById(pageId).classList.add('active');
+      
+      // Initialize page-specific functionality
+      if (pageId === 'studentDashboardPage') {
+        initializeStudentDashboard();
+      } else if (pageId === 'teacherDashboardPage') {
+        initializeTeacherDashboard();
+      }
     }
 
     // Student registration
@@ -612,263 +619,227 @@
       `);
     }
 
-    // Student login form
-    document.getElementById('studentLoginForm').addEventListener('submit', function(e) {
-      e.preventDefault();
-      
-      const mobile = document.getElementById('studentMobile').value;
-      const password = document.getElementById('studentPassword').value;
-      const notification = document.getElementById('studentLoginNotification');
-      
-      loginStudent(mobile, password)
-        .then(() => {
-          showPage('studentDashboardPage');
-        })
-        .catch(error => {
-          notification.textContent = error.message;
-          notification.classList.remove('hidden');
-          notification.classList.add('error');
-        });
-    });
-
-    // Teacher login form
-    document.getElementById('teacherLoginForm').addEventListener('submit', function(e) {
-      e.preventDefault();
-      
-      const email = document.getElementById('teacherEmail').value;
-      const password = document.getElementById('teacherPassword').value;
-      const notification = document.getElementById('teacherLoginNotification');
-      
-      loginTeacher(email, password)
-        .then(() => {
-          showPage('teacherDashboardPage');
-        })
-        .catch(error => {
-          notification.textContent = error.message;
-          notification.classList.remove('hidden');
-          notification.classList.add('error');
-        });
-    });
-
-    // Student registration form
-    document.getElementById('studentRegisterForm').addEventListener('submit', function(e) {
-      e.preventDefault();
-      
-      const name = document.getElementById('studentName').value;
-      const mobile = document.getElementById('studentRegMobile').value;
-      const password = document.getElementById('studentRegPassword').value;
-      const confirmPassword = document.getElementById('studentConfirmPassword').value;
-      const notification = document.getElementById('studentRegisterNotification');
-      
-      if (password !== confirmPassword) {
-        notification.textContent = 'Passwords do not match';
-        notification.classList.remove('hidden');
-        notification.classList.add('error');
-        return;
-      }
-      
-      registerStudent(name, mobile, password)
-        .then(() => {
-          notification.textContent = 'Registration successful! You can now login.';
-          notification.classList.remove('hidden');
-          notification.classList.remove('error');
-          
-          setTimeout(() => {
-            showPage('studentLoginPage');
-          }, 2000);
-        })
-        .catch(error => {
-          notification.textContent = error.message;
-          notification.classList.remove('hidden');
-          notification.classList.add('error');
-        });
-    });
-
-    // Student logout
-    document.getElementById('studentLogoutBtn').addEventListener('click', function() {
-      logout().then(() => {
-        showPage('indexPage');
-      });
-    });
-
-    // Teacher logout
-    document.getElementById('teacherLogoutBtn').addEventListener('click', function() {
-      logout().then(() => {
-        showPage('indexPage');
-      });
-    });
-
-    // File input change for student
-    document.getElementById('testCopyFile').addEventListener('change', function() {
-      const fileName = this.files[0] ? this.files[0].name : 'No file chosen';
-      document.getElementById('fileName').textContent = fileName;
-    });
-
-    // Upload button for student
-    document.getElementById('uploadBtn').addEventListener('click', function() {
-      const fileInput = document.getElementById('testCopyFile');
-      const notification = document.getElementById('studentUploadNotification');
-      
-      if (!fileInput.files[0]) {
-        notification.textContent = 'Please select a file to upload';
-        notification.classList.remove('hidden');
-        notification.classList.add('error');
-        return;
-      }
-      
-      const file = fileInput.files[0];
-      
-      // Check file size
-      if (file.size > 1000000) { // 1MB in bytes
-        notification.textContent = 'File size must be less than 1MB';
-        notification.classList.remove('hidden');
-        notification.classList.add('error');
-        return;
-      }
-      
+    // Initialize Student Dashboard
+    function initializeStudentDashboard() {
       const studentId = auth.currentUser.uid;
       
-      uploadTestCopy(studentId, file)
-        .then(() => {
-          notification.textContent = 'File uploaded successfully!';
-          notification.classList.remove('hidden');
-          notification.classList.remove('error');
-          
-          // Reset file input
-          fileInput.value = '';
-          document.getElementById('fileName').textContent = 'No file chosen';
-          
-          // Reload the copies list
-          loadStudentCopies(studentId);
-        })
-        .catch(error => {
-          notification.textContent = error.message;
-          notification.classList.remove('hidden');
-          notification.classList.add('error');
+      // Load student data
+      loadStudentData(studentId);
+      
+      // File input change
+      const fileInput = document.getElementById('testCopyFile');
+      if (fileInput) {
+        fileInput.addEventListener('change', function() {
+          const fileName = this.files[0] ? this.files[0].name : 'No file chosen';
+          document.getElementById('fileName').textContent = fileName;
         });
-    });
-
-    // Search button for teacher
-    document.getElementById('searchBtn').addEventListener('click', function() {
-      const mobile = document.getElementById('teacherStudentMobile').value;
-      const notification = document.getElementById('searchNotification');
-      
-      if (!mobile) {
-        notification.textContent = 'Please enter a mobile number';
-        notification.classList.remove('hidden');
-        notification.classList.add('error');
-        return;
       }
       
-      getStudentByMobile(mobile)
-        .then(querySnapshot => {
-          if (querySnapshot.empty) {
-            notification.textContent = 'No student found with this mobile number';
-            notification.classList.remove('hidden');
-            notification.classList.add('error');
-            document.getElementById('studentInfo').classList.add('hidden');
-            return;
-          }
+      // Upload button
+      const uploadBtn = document.getElementById('uploadBtn');
+      if (uploadBtn) {
+        uploadBtn.addEventListener('click', function() {
+          const fileInput = document.getElementById('testCopyFile');
+          const notification = document.getElementById('studentUploadNotification');
           
-          const studentDoc = querySnapshot.docs[0];
-          const studentData = studentDoc.data();
-          
-          document.getElementById('studentName').textContent = studentData.name;
-          document.getElementById('studentMobileDisplay').textContent = studentData.mobile;
-          document.getElementById('studentInfo').classList.remove('hidden');
-          document.getElementById('studentInfo').dataset.studentId = studentDoc.id;
-          
-          notification.textContent = 'Student found! You can now upload a checked copy.';
-          notification.classList.remove('hidden');
-          notification.classList.remove('error');
-        })
-        .catch(error => {
-          notification.textContent = error.message;
-          notification.classList.remove('hidden');
-          notification.classList.add('error');
-        });
-    });
-
-    // File input change for teacher
-    document.getElementById('checkedCopyFile').addEventListener('change', function() {
-      const fileName = this.files[0] ? this.files[0].name : 'No file chosen';
-      document.getElementById('checkedFileName').textContent = fileName;
-    });
-
-    // Upload checked copy button for teacher
-    document.getElementById('uploadCheckedBtn').addEventListener('click', function() {
-      const fileInput = document.getElementById('checkedCopyFile');
-      const studentInfo = document.getElementById('studentInfo');
-      const notification = document.getElementById('searchNotification');
-      
-      if (!fileInput.files[0]) {
-        notification.textContent = 'Please select a file to upload';
-        notification.classList.remove('hidden');
-        notification.classList.add('error');
-        return;
-      }
-      
-      const file = fileInput.files[0];
-      
-      // Check file size
-      if (file.size > 1000000) { // 1MB in bytes
-        notification.textContent = 'File size must be less than 1MB';
-        notification.classList.remove('hidden');
-        notification.classList.add('error');
-        return;
-      }
-      
-      if (!studentInfo.dataset.studentId) {
-        notification.textContent = 'Please search for a student first';
-        notification.classList.remove('hidden');
-        notification.classList.add('error');
-        return;
-      }
-      
-      const studentId = studentInfo.dataset.studentId;
-      
-      // Find a pending copy for this student
-      db.collection('testCopies')
-        .where('studentId', '==', studentId)
-        .where('status', '==', 'pending')
-        .limit(1)
-        .get()
-        .then(querySnapshot => {
-          if (querySnapshot.empty) {
-            notification.textContent = 'No pending copy found for this student';
+          if (!fileInput.files[0]) {
+            notification.textContent = 'Please select a file to upload';
             notification.classList.remove('hidden');
             notification.classList.add('error');
             return;
           }
           
-          const testCopyDoc = querySnapshot.docs[0];
-          const testCopyId = testCopyDoc.id;
+          const file = fileInput.files[0];
           
-          uploadCheckedCopy(studentId, testCopyId, file)
+          // Check file size
+          if (file.size > 1000000) { // 1MB in bytes
+            notification.textContent = 'File size must be less than 1MB';
+            notification.classList.remove('hidden');
+            notification.classList.add('error');
+            return;
+          }
+          
+          const studentId = auth.currentUser.uid;
+          
+          uploadTestCopy(studentId, file)
             .then(() => {
-              notification.textContent = 'Checked copy uploaded successfully!';
+              notification.textContent = 'File uploaded successfully!';
               notification.classList.remove('hidden');
               notification.classList.remove('error');
               
               // Reset file input
               fileInput.value = '';
-              document.getElementById('checkedFileName').textContent = 'No file chosen';
+              document.getElementById('fileName').textContent = 'No file chosen';
               
-              // Reload the pending copies list
-              loadPendingCopies();
+              // Reload the copies list
+              loadStudentCopies(studentId);
+            })
+            .catch(error => {
+              console.error('Upload error:', error);
+              notification.textContent = 'Error uploading file: ' + error.message;
+              notification.classList.remove('hidden');
+              notification.classList.add('error');
+            });
+        });
+      }
+      
+      // Logout button
+      const logoutBtn = document.getElementById('studentLogoutBtn');
+      if (logoutBtn) {
+        logoutBtn.addEventListener('click', function() {
+          logout().then(() => {
+            showPage('indexPage');
+          });
+        });
+      }
+    }
+
+    // Initialize Teacher Dashboard
+    function initializeTeacherDashboard() {
+      // Load pending copies
+      loadPendingCopies();
+      
+      // File input change
+      const fileInput = document.getElementById('checkedCopyFile');
+      if (fileInput) {
+        fileInput.addEventListener('change', function() {
+          const fileName = this.files[0] ? this.files[0].name : 'No file chosen';
+          document.getElementById('checkedFileName').textContent = fileName;
+        });
+      }
+      
+      // Search button
+      const searchBtn = document.getElementById('searchBtn');
+      if (searchBtn) {
+        searchBtn.addEventListener('click', function() {
+          const mobile = document.getElementById('teacherStudentMobile').value;
+          const notification = document.getElementById('searchNotification');
+          
+          if (!mobile) {
+            notification.textContent = 'Please enter a mobile number';
+            notification.classList.remove('hidden');
+            notification.classList.add('error');
+            return;
+          }
+          
+          getStudentByMobile(mobile)
+            .then(querySnapshot => {
+              if (querySnapshot.empty) {
+                notification.textContent = 'No student found with this mobile number';
+                notification.classList.remove('hidden');
+                notification.classList.add('error');
+                document.getElementById('studentInfo').classList.add('hidden');
+                return;
+              }
+              
+              const studentDoc = querySnapshot.docs[0];
+              const studentData = studentDoc.data();
+              
+              document.getElementById('studentName').textContent = studentData.name;
+              document.getElementById('studentMobileDisplay').textContent = studentData.mobile;
+              document.getElementById('studentInfo').classList.remove('hidden');
+              document.getElementById('studentInfo').dataset.studentId = studentDoc.id;
+              
+              notification.textContent = 'Student found! You can now upload a checked copy.';
+              notification.classList.remove('hidden');
+              notification.classList.remove('error');
             })
             .catch(error => {
               notification.textContent = error.message;
               notification.classList.remove('hidden');
               notification.classList.add('error');
             });
-        })
-        .catch(error => {
-          notification.textContent = error.message;
-          notification.classList.remove('hidden');
-          notification.classList.add('error');
         });
-    });
+      }
+      
+      // Upload checked copy button
+      const uploadCheckedBtn = document.getElementById('uploadCheckedBtn');
+      if (uploadCheckedBtn) {
+        uploadCheckedBtn.addEventListener('click', function() {
+          const fileInput = document.getElementById('checkedCopyFile');
+          const studentInfo = document.getElementById('studentInfo');
+          const notification = document.getElementById('searchNotification');
+          
+          if (!fileInput.files[0]) {
+            notification.textContent = 'Please select a file to upload';
+            notification.classList.remove('hidden');
+            notification.classList.add('error');
+            return;
+          }
+          
+          const file = fileInput.files[0];
+          
+          // Check file size
+          if (file.size > 1000000) { // 1MB in bytes
+            notification.textContent = 'File size must be less than 1MB';
+            notification.classList.remove('hidden');
+            notification.classList.add('error');
+            return;
+          }
+          
+          if (!studentInfo.dataset.studentId) {
+            notification.textContent = 'Please search for a student first';
+            notification.classList.remove('hidden');
+            notification.classList.add('error');
+            return;
+          }
+          
+          const studentId = studentInfo.dataset.studentId;
+          
+          // Find a pending copy for this student
+          db.collection('testCopies')
+            .where('studentId', '==', studentId)
+            .where('status', '==', 'pending')
+            .limit(1)
+            .get()
+            .then(querySnapshot => {
+              if (querySnapshot.empty) {
+                notification.textContent = 'No pending copy found for this student';
+                notification.classList.remove('hidden');
+                notification.classList.add('error');
+                return;
+              }
+              
+              const testCopyDoc = querySnapshot.docs[0];
+              const testCopyId = testCopyDoc.id;
+              
+              uploadCheckedCopy(studentId, testCopyId, file)
+                .then(() => {
+                  notification.textContent = 'Checked copy uploaded successfully!';
+                  notification.classList.remove('hidden');
+                  notification.classList.remove('error');
+                  
+                  // Reset file input
+                  fileInput.value = '';
+                  document.getElementById('checkedFileName').textContent = 'No file chosen';
+                  
+                  // Reload the pending copies list
+                  loadPendingCopies();
+                })
+                .catch(error => {
+                  notification.textContent = error.message;
+                  notification.classList.remove('hidden');
+                  notification.classList.add('error');
+                });
+            })
+            .catch(error => {
+              notification.textContent = error.message;
+              notification.classList.remove('hidden');
+              notification.classList.add('error');
+            });
+        });
+      }
+      
+      // Logout button
+      const logoutBtn = document.getElementById('teacherLogoutBtn');
+      if (logoutBtn) {
+        logoutBtn.addEventListener('click', function() {
+          logout().then(() => {
+            showPage('indexPage');
+          });
+        });
+      }
+    }
 
     // Load student data
     function loadStudentData(studentId) {
@@ -881,6 +852,8 @@
       getStudentCopies(studentId)
         .then(querySnapshot => {
           const tableBody = document.getElementById('copiesTableBody');
+          if (!tableBody) return;
+          
           tableBody.innerHTML = '';
           
           if (querySnapshot.empty) {
@@ -916,6 +889,8 @@
       getCheckedCopies(studentId)
         .then(querySnapshot => {
           const tableBody = document.getElementById('checkedCopiesTableBody');
+          if (!tableBody) return;
+          
           tableBody.innerHTML = '';
           
           if (querySnapshot.empty) {
@@ -950,6 +925,8 @@
       getPendingCopies()
         .then(querySnapshot => {
           const tableBody = document.getElementById('pendingCopiesTableBody');
+          if (!tableBody) return;
+          
           tableBody.innerHTML = '';
           
           if (querySnapshot.empty) {
@@ -1001,6 +978,90 @@
       document.getElementById('teacherStudentMobile').value = mobile;
       document.getElementById('searchBtn').click();
     }
+
+    // Form submissions
+    document.addEventListener('DOMContentLoaded', function() {
+      // Student login form
+      const studentLoginForm = document.getElementById('studentLoginForm');
+      if (studentLoginForm) {
+        studentLoginForm.addEventListener('submit', function(e) {
+          e.preventDefault();
+          
+          const mobile = document.getElementById('studentMobile').value;
+          const password = document.getElementById('studentPassword').value;
+          const notification = document.getElementById('studentLoginNotification');
+          
+          loginStudent(mobile, password)
+            .then(() => {
+              showPage('studentDashboardPage');
+            })
+            .catch(error => {
+              notification.textContent = error.message;
+              notification.classList.remove('hidden');
+              notification.classList.add('error');
+            });
+        });
+      }
+      
+      // Teacher login form
+      const teacherLoginForm = document.getElementById('teacherLoginForm');
+      if (teacherLoginForm) {
+        teacherLoginForm.addEventListener('submit', function(e) {
+          e.preventDefault();
+          
+          const email = document.getElementById('teacherEmail').value;
+          const password = document.getElementById('teacherPassword').value;
+          const notification = document.getElementById('teacherLoginNotification');
+          
+          loginTeacher(email, password)
+            .then(() => {
+              showPage('teacherDashboardPage');
+            })
+            .catch(error => {
+              notification.textContent = error.message;
+              notification.classList.remove('hidden');
+              notification.classList.add('error');
+            });
+        });
+      }
+      
+      // Student registration form
+      const studentRegisterForm = document.getElementById('studentRegisterForm');
+      if (studentRegisterForm) {
+        studentRegisterForm.addEventListener('submit', function(e) {
+          e.preventDefault();
+          
+          const name = document.getElementById('studentName').value;
+          const mobile = document.getElementById('studentRegMobile').value;
+          const password = document.getElementById('studentRegPassword').value;
+          const confirmPassword = document.getElementById('studentConfirmPassword').value;
+          const notification = document.getElementById('studentRegisterNotification');
+          
+          if (password !== confirmPassword) {
+            notification.textContent = 'Passwords do not match';
+            notification.classList.remove('hidden');
+            notification.classList.add('error');
+            return;
+          }
+          
+          registerStudent(name, mobile, password)
+            .then(() => {
+              notification.textContent = 'Registration successful! You can now login.';
+              notification.classList.remove('hidden');
+              notification.classList.remove('error');
+              
+              setTimeout(() => {
+                showPage('studentLoginPage');
+              }, 2000);
+            })
+            .catch(error => {
+              notification.textContent = error.message;
+              notification.classList.remove('hidden');
+              notification.classList.add('error');
+            });
+        });
+      }
+    });
 
     // Check authentication state
     auth.onAuthStateChanged(user => {
